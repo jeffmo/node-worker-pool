@@ -1,0 +1,8 @@
+{
+  "name": "node-worker-pool",
+  "version": "0.1.0",
+  "dependencies": {
+    "q": "~0.9.7"
+  },
+  "main": "WorkerPool"
+}
