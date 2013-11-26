@@ -16,6 +16,7 @@ function WorkerPool(maxWorkers, workerPath, workerArgs, lazyBoot) {
   this._queuedMsgIds = [];
   // TODO: See todos in _onWorkerStderr and _onWorkerClose below
   //this._workerErrorOutput = {};
+  this._shutdownDeferred = null;
   this._workerIdToMsgId = {};
   this._workerOutput = [];
   this._workers = [];
@@ -52,11 +53,15 @@ WorkerPool.prototype.sendMessage = function(msg) {
 };
 
 WorkerPool.prototype.shutDown = function() {
+  this._shutdownDeferred = Q.defer();
   if (this._availWorkerIds.length !== this._workers.length) {
     this._isShutdown = true;
   } else {
     this._destroyAllWorkers();
+    this._shutdownDeferred.resolve();
+    this._shutdownDeferred = null;
   }
+  return this._shutdownDeferred.promise;
 }
 
 WorkerPool.prototype._eagerBootAllWorkers = function() {
@@ -82,6 +87,7 @@ WorkerPool.prototype._createWorker = function() {
 WorkerPool.prototype._destroyAllWorkers = function() {
   this._workers.forEach(function(worker) {
     worker.stdin.end();
+    worker.kill();
   });
 };
 
@@ -119,7 +125,7 @@ WorkerPool.prototype._onWorkerStdout = function(workerId, data) {
   var responses = this._workerStreamParsers[workerId].parse(
     this._workerOutput[workerId]
   );
-  
+
   if (responses.length === 1) {
     var msgId = this._workerIdToMsgId[workerId];
     var workerResponse = responses[0];
@@ -143,9 +149,11 @@ WorkerPool.prototype._onWorkerStdout = function(workerId, data) {
     if (this._queuedMsgIds.length > 0) {
       var msgId = this._queuedMsgIds.shift();
       this._sendMsgToAvailWorker(msgId);
-    } else if (this._isShutdown && 
+    } else if (this._isShutdown &&
                this._availWorkerIds.length === this._workers.length) {
       this._destroyAllWorkers();
+      this._shutdownDeferred.resolve();
+      this._shutdownDeferred = null;
       this._isShutdown = false;
     }
 
