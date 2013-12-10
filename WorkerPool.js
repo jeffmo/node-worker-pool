@@ -54,6 +54,7 @@ WorkerPool.prototype.sendMessage = function(msg) {
 
 WorkerPool.prototype.shutDown = function() {
   this._shutdownDeferred = Q.defer();
+  var shutdownPromise = this._shutdownDeferred.promise;
   if (this._availWorkerIds.length !== this._workers.length) {
     this._isShutdown = true;
   } else {
@@ -61,7 +62,7 @@ WorkerPool.prototype.shutDown = function() {
     this._shutdownDeferred.resolve();
     this._shutdownDeferred = null;
   }
-  return this._shutdownDeferred.promise;
+  return shutdownPromise;
 }
 
 WorkerPool.prototype._eagerBootAllWorkers = function() {
