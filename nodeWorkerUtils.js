@@ -34,9 +34,9 @@ function startWorker(onMessageReceived, onShutdown) {
             );
           }
           return response;
-        }).then(respondWithResult, respondWithError).done();
+        }).done(respondWithResult, respondWithError);
       } catch (e) {
-        respondWithError(e.stack);
+        respondWithError(e.stack || e.message);
       }
     } else if (rcvdMsg.length > 1) {
       throw new Error(
