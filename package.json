@@ -4,5 +4,8 @@
   "dependencies": {
     "q": "~0.9.7"
   },
-  "main": "WorkerPool"
+  "main": "WorkerPool",
+  "scripts": {
+    "test": "node node_modules/jest/bin/runTests.js --config=testConfig.json"
+  }
 }
