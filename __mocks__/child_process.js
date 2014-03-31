@@ -5,12 +5,14 @@ mockExports.mockChildren = [];
 
 mockExports.spawn.mockImplementation(function(path, args) {
   var child = {
+    kill: getMockFn(),
     on: getMockFn(),
     stderr: {
       setEncoding: getMockFn(),
       on: getMockFn()
     },
     stdin: {
+      end: getMockFn(),
       write: getMockFn()
     },
     stdout: {

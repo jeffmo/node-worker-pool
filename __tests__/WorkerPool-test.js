@@ -1,102 +1,309 @@
 require('mock-modules')
   .autoMockOff()
-  .mock('child_process');
+  .mock('../Worker');
 
 describe('WorkerPool', function() {
-  var FAKE_WORKER_ARGS = ['--fakeArg1', '--fakeArg2=42'];
-  var FAKE_WORKER_PATH = '/path/to/some/fake/worker';
+  var FAKE_ARGS = ['--fakeArg1', '--fakeArg2=42'];
+  var FAKE_INIT_DATA = {initData: 12345};
+  var FAKE_PATH = '/path/to/some/fake/worker';
 
-  var child_process;
+  var Q;
+  var Worker;
   var WorkerPool;
+
+  var _workerDestroyDeferreds;
+  var _workerSendMessageDeferreds;
+
+  function _arraySetsAreEqual(set1, set2) {
+    if (set1.length !== set2.length) {
+      return false;
+    }
+
+    var matchedIndexes = {};
+    for (var i = 0; i < set1.length; i++) {
+      var found = false;
+      for (var j = 0; j < set2.length; j++) {
+        if (matchedIndexes[j]) {
+          continue;
+        }
+
+        if (jasmine.getEnv().equals_(set1[i], set2[j])) {
+          found = true;
+          matchedIndexes[j] = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        return false;
+      }
+    }
+  }
+
+  function _expectReject(promise, expectedError) {
+    return promise.then(function() {
+      throw new Error(
+        'Expected promise to be rejected, but it was resolved!'
+      );
+    }, function(error) {
+      if (expectedError) {
+        expect(error).toEqual(expectedError);
+      }
+    });
+  }
+
+  function _getAllMessageSends() {
+    return _getWorkerMessageSends().reduce(function(allSends, workerCall) {
+      return workerCall.reduce(function(allSends, workerArgs) {
+        return allSends.concat(workerArgs);
+      }, allSends);
+    }, []);
+  }
+
+  function _getWorkerMessageSends() {
+    return (
+      Worker.mock.instances
+        .filter(function(inst) {
+          return inst.sendMessage.mock.calls.length > 0;
+        })
+        .map(function(inst) {
+          return inst.sendMessage.mock.calls;
+        })
+    );
+  }
 
   beforeEach(function() {
     require('mock-modules').dumpCache();
-    child_process = require('child_process');
+    Q = require('q');
+    Worker = require('../Worker');
     WorkerPool = require('../WorkerPool');
+
+    this.addMatchers({
+      toMatchArraySet: function(arraySet) {
+        if (!Array.isArray(this.actual)) {
+          throw new Error('Expected a non-array to match an array set!');
+        }
+        if (!Array.isArray(arraySet)) {
+          throw new Error('Array sets have to be an array...');
+        }
+
+        if (this.actual.length !== arraySet.length) {
+          return false;
+        }
+
+        var matchedIndexes = {};
+        for (var i = 0; i < this.actual.length; i++) {
+          var found = false;
+          for (var j = 0; j < arraySet.length; j++) {
+            if (matchedIndexes[j]) {
+              continue;
+            }
+
+            if (jasmine.getEnv().equals_(this.actual[i], arraySet[j])) {
+              found = true;
+              matchedIndexes[j] = true;
+              break;
+            }
+          }
+
+          if (!found) {
+            return false;
+          }
+        }
+
+        return true;
+      }
+    });
+
+    // TODO: Add support to jest for promise return values
+    _workerDestroyDeferreds = [];
+    _workerSendMessageDeferreds = [];
+    Worker.prototype.destroy.mockImpl(function() {
+      var deferred = Q.defer();
+      _workerDestroyDeferreds.push(deferred);
+      return deferred.promise;
+    });
+    Worker.prototype.sendMessage.mockImpl(function() {
+      var deferred = Q.defer();
+      _workerSendMessageDeferreds.push(deferred);
+      return deferred.promise;
+    });
   });
 
-  describe('eager/lazy booting of workers', function() {
-    it('eagerly boots all workers on instantiation', function() {
-      var pool = new WorkerPool(3, FAKE_WORKER_PATH, FAKE_WORKER_ARGS);
-      expect(child_process.spawn.mock.calls.length).toBe(3);
+  describe('worker booting', function() {
+    pit('eagerly boots all workers by default', function() {
+      new WorkerPool(3, FAKE_PATH, FAKE_ARGS, {
+        initData: FAKE_INIT_DATA
+      });
+      expect(Worker.mock.instances.length).toBe(3);
     });
 
-    it('lazily boots workers when lazyBoot flag is passed', function() {
-      var pool = new WorkerPool(3, FAKE_WORKER_PATH, FAKE_WORKER_ARGS, true);
-      expect(child_process.spawn.mock.calls.length).toBe(0);
-      pool.sendMessage({value:1});
-      expect(child_process.spawn.mock.calls.length).toBe(1);
-      pool.sendMessage({value:2});
-      expect(child_process.spawn.mock.calls.length).toBe(2);
-      pool.sendMessage({value:3});
-      expect(child_process.spawn.mock.calls.length).toBe(3);
+    pit('lazily boots workers when lazyBoot flag is passed', function() {
+      var pool = new WorkerPool(3, FAKE_PATH, FAKE_ARGS, {
+        initData: FAKE_INIT_DATA,
+        lazyBoot: true
+      });
+      expect(Worker.mock.instances.length).toBe(0);
+
+      pool.sendMessage({value: 1});
+      expect(Worker.mock.instances.length).toBe(1);
+
+      pool.sendMessage({value: 2});
+      expect(Worker.mock.instances.length).toBe(2);
+
+      pool.sendMessage({value: 3});
+      expect(Worker.mock.instances.length).toBe(3);
+
+      pool.sendMessage({value: 4});
+      expect(Worker.mock.instances.length).toBe(3);
     });
 
-    it('does not lazily boot more than the max specified workers', function() {
-      var pool = new WorkerPool(3, FAKE_WORKER_PATH, FAKE_WORKER_ARGS, true);
-      pool.sendMessage({value:1});
-      pool.sendMessage({value:2});
-      pool.sendMessage({value:3});
-      pool.sendMessage({value:4});
-      expect(child_process.spawn.mock.calls.length).toBe(3);
+    pit('passes correct worker args down to booted workers', function() {
+      var pool = new WorkerPool(1, FAKE_PATH, FAKE_ARGS, {
+        initData: FAKE_INIT_DATA,
+        printChildResponses: true
+      });
+
+      var passedArgs = Worker.mock.calls[0];
+      expect(passedArgs.length).toBe(3);
+      expect(passedArgs[0]).toBe(FAKE_PATH);
+      expect(passedArgs[1]).toBe(FAKE_ARGS);
+      expect(passedArgs[2].initData).toEqual(FAKE_INIT_DATA);
+      expect(passedArgs[2].printChildResponses).toBe(true);
     });
   });
 
   describe('sendMessage', function() {
-    it('sends a message to only one worker', function() {
-      var pool = new WorkerPool(2, FAKE_WORKER_PATH, FAKE_WORKER_ARGS);
-      pool.sendMessage({value:1});
-      var numSent = child_process.mockChildren.reduce(function(num, child) {
-        return num + child.stdin.write.mock.calls.length
-      }, 0);
-      expect(numSent).toBe(1);
+    pit('sends a message to only one worker', function() {
+      var MESSAGE = {value: 1};
+      var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
+      pool.sendMessage(MESSAGE);
+
+      expect(_getWorkerMessageSends()).toEqual([
+        [[MESSAGE]] // Worker 1
+      ]);
     });
 
-    it('sends one message to a worker at a time', function() {
-      var pool = new WorkerPool(2, FAKE_WORKER_PATH, FAKE_WORKER_ARGS);
-      pool.sendMessage({value:1});
-      pool.sendMessage({value:2});
+    pit('sends one message to a given worker at a time', function() {
+      var MESSAGE1 = {value: 1};
+      var MESSAGE2 = {value: 2};
+      var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
+      pool.sendMessage(MESSAGE1);
+      pool.sendMessage(MESSAGE2);
 
-      var sentMessages = {};
-      expect(child_process.mockChildren.length).toBe(2);
-      child_process.mockChildren.forEach(function(child) {
-        // Since we have the same number of messages as workers, expect that
-        // each worker should have recieved exactly one message
-        expect(child.stdin.write.mock.calls.length).toBe(1);
-        var msg = JSON.parse(child.stdin.write.mock.calls[0][0]).msg;
+      expect(_getWorkerMessageSends()).toEqual([
+        [[MESSAGE1]], // Worker 1
+        [[MESSAGE2]]  // Worker 2
+      ]);
+    });
 
-        // Make sure the message wasn't sent to another worker
-        expect(sentMessages.hasOwnProperty(msg.value)).toBe(false);
-        sentMessages[msg.value] = true;
+    pit('queues messages when all workers are busy', function() {
+      var MESSAGE1 = {value: 1};
+      var MESSAGE2 = {value: 2};
+      var MESSAGE3 = {value: 3};
+      var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
+      pool.sendMessage(MESSAGE1);
+      pool.sendMessage(MESSAGE2);
+      pool.sendMessage(MESSAGE3);
+
+      expect(_getAllMessageSends()).toMatchArraySet([
+        MESSAGE1,
+        MESSAGE2
+      ]);
+
+      _workerSendMessageDeferreds[0].resolve();
+      mockRunTicksRepeatedly();
+
+      expect(_getAllMessageSends()).toMatchArraySet([
+        MESSAGE1,
+        MESSAGE2,
+        MESSAGE3
+      ]);
+    });
+
+    pit('throws when sending a message after being destroyed', function() {
+      var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
+      pool.destroy();
+      expect(function() {
+        pool.sendMessage({value: 1});
+      }).toThrow(
+        'Attempted to send a message after the worker pool has alread been ' +
+        '(or is in the process of) shutting down!'
+      );
+    });
+
+    pit('passes up response from worker for non-queued message', function() {
+      var MESSAGE = {input: 42};
+      var RESPONSE = {output: 42};
+      var pool = new WorkerPool(1, FAKE_PATH, FAKE_ARGS);
+
+      var response = pool.sendMessage(MESSAGE);
+      _workerSendMessageDeferreds[0].resolve(RESPONSE);
+
+      return response.then(function(response) {
+        expect(response).toEqual(RESPONSE);
       });
     });
 
-    it('queues messages when all workers are busy', function() {
-      var pool = new WorkerPool(2, FAKE_WORKER_PATH, FAKE_WORKER_ARGS);
-      pool.sendMessage({value:1});
-      pool.sendMessage({value:2});
-      pool.sendMessage({value:3});
+    pit('passes up response from worker for queued message', function() {
+      var MESSAGE1 = {input: 42};
+      var MESSAGE2 = {input: 43};
+      var RESPONSE1 = {input: 42};
+      var RESPONSE2 = {input: 43};
+      var pool = new WorkerPool(1, FAKE_PATH, FAKE_ARGS);
 
-      // Only 2 messages should have been sent
-      var childProcs = child_process.mockChildren;
-      var numSentMessages = childProcs.reduce(function(numSent, child) {
-        return child.stdin.write.mock.calls.length + numSent;
-      }, 0);
-      expect(numSentMessages).toBe(2);
+      // The first message occupies the only available worker
+      pool.sendMessage(MESSAGE1);
+      var firstResponseDeferred = _workerSendMessageDeferreds[0];
 
-      // Resolve a response from one of the children
-      var onDataCallback = childProcs[0].stdout.on.mock.calls[0][1];
-      onDataCallback(JSON.stringify({response:'hai'}));
+      // The second message is queued because there are no available workers
+      var queuedMsgResponse = pool.sendMessage(MESSAGE2);
 
-      // Now 3 messages should have been sent
-      var sentMessageValues = childProcs.reduce(function(msgs, child) {
-        child.stdin.write.mock.calls.forEach(function(callArgs) {
-          var msg = JSON.parse(callArgs[0]).msg;
-          msgs[msg.value] = true;
-        });
-        return msgs;
-      }, {});
-      expect(sentMessageValues).toEqual({1:true, 2:true, 3:true});
+      // Free the only available worker by sending a response from it.
+      // This should cause the second (queued) message to be sent to the worker.
+      firstResponseDeferred.resolve(RESPONSE1);
+      mockRunTicksRepeatedly();
+
+      // Respond to the second message passed to the single worker
+      _workerSendMessageDeferreds.filter(function(deferred) {
+        return deferred !== firstResponseDeferred;
+      }).pop().resolve(RESPONSE2);
+
+      return queuedMsgResponse.then(function(response) {
+        expect(response).toEqual(RESPONSE2);
+      });
+    });
+  });
+
+  describe('destroy', function() {
+    pit('destroys all workers', function() {
+      var pool = new WorkerPool(3, FAKE_PATH, FAKE_ARGS);
+
+      pool.destroy();
+      mockRunTicksRepeatedly();
+
+      expect(Worker.mock.instances.length).toBe(3);
+      expect(Worker.mock.instances[0].destroy.mock.calls.length).toBe(1);
+      expect(Worker.mock.instances[1].destroy.mock.calls.length).toBe(1);
+      expect(Worker.mock.instances[2].destroy.mock.calls.length).toBe(1);
+    });
+
+    pit('waits for all workers to be destroyed before resolving', function() {
+      var pool = new WorkerPool(3, FAKE_PATH, FAKE_ARGS);
+      var poolIsDestroyed = false;
+      var destroyPool = pool.destroy().then(function() {
+        poolIsDestroyed = true;
+      });
+      mockRunTicksRepeatedly();
+      expect(poolIsDestroyed).toBe(false);
+
+      _workerDestroyDeferreds.forEach(function(workerDestroyDeferred) {
+        workerDestroyDeferred.resolve();
+      });
+
+      return destroyPool.then(function() {
+        expect(poolIsDestroyed).toBe(true);
+      });
     });
   });
 });

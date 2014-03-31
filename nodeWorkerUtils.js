@@ -18,23 +18,31 @@ function startWorker(onMessageReceived, onShutdown) {
   process.stdin.setEncoding('utf8');
   var inputData = '';
   var inputStreamParser = new JSONStreamParser();
+
+  var initialized = false;
+  var initData = null;
+
   process.stdin.on('data', function(data) {
     inputData += data;
     var rcvdMsg = inputStreamParser.parse(inputData);
     if (rcvdMsg.length === 1) {
-      var msg = rcvdMsg[0].msg;
-      var workerId = rcvdMsg[0].workerId;
-      var response;
       try {
-        onMessageReceived(msg).then(function(response) {
-          if (!response || typeof response !== 'object') {
-            throw new Error(
-              'worker(' + workerId + ') attempted to supply an invalid ' +
-              'response: ' + JSON.stringify(response, null, 2)
-            );
-          }
-          return response;
-        }).done(respondWithResult, respondWithError);
+        if (initialized === false) {
+          initData = rcvdMsg[0].initData;
+          initialized = true;
+          console.log(JSON.stringify({initSuccess: true}));
+        } else {
+          var message = rcvdMsg[0].message;
+          onMessageReceived(message, initData).then(function(response) {
+            if (!response || typeof response !== 'object') {
+              throw new Error(
+                'Invalid response returned by worker function: ' +
+                JSON.stringify(response, null, 2)
+              );
+            }
+            return response;
+          }).done(respondWithResult, respondWithError);
+        }
       } catch (e) {
         respondWithError(e.stack || e.message);
       }
