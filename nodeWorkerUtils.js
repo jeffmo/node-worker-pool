@@ -13,7 +13,7 @@ function respondWithResult(result) {
   console.log(JSON.stringify({response: result}, null, 2));
 }
 
-function startWorker(onMessageReceived, onShutdown) {
+function startWorker(onInitialize, onMessageReceived, onShutdown) {
   process.stdin.resume();
   process.stdin.setEncoding('utf8');
   var inputData = '';
@@ -26,14 +26,19 @@ function startWorker(onMessageReceived, onShutdown) {
     inputData += data;
     var rcvdMsg = inputStreamParser.parse(inputData);
     if (rcvdMsg.length === 1) {
-      try {
-        if (initialized === false) {
-          initData = rcvdMsg[0].initData;
+      if (initialized === false) {
+        try {
+          onInitialize(rcvdMsg[0].initData);
           initialized = true;
           console.log(JSON.stringify({initSuccess: true}));
-        } else {
+        } catch (e) {
+          console.log(JSON.stringify({initError: e.stack || e.message}));
+          throw e;
+        }
+      } else {
+        try {
           var message = rcvdMsg[0].message;
-          onMessageReceived(message, initData).then(function(response) {
+          onMessageReceived(message).then(function(response) {
             if (!response || typeof response !== 'object') {
               throw new Error(
                 'Invalid response returned by worker function: ' +
@@ -42,9 +47,9 @@ function startWorker(onMessageReceived, onShutdown) {
             }
             return response;
           }).done(respondWithResult, respondWithError);
+        } catch (e) {
+          respondWithError(e.stack || e.message);
         }
-      } catch (e) {
-        respondWithError(e.stack || e.message);
       }
     } else if (rcvdMsg.length > 1) {
       throw new Error(
