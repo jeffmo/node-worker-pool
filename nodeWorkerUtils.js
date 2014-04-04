@@ -28,7 +28,7 @@ function startWorker(onInitialize, onMessageReceived, onShutdown) {
     if (rcvdMsg.length === 1) {
       if (initialized === false) {
         try {
-          onInitialize(rcvdMsg[0].initData);
+          onInitialize && onInitialize(rcvdMsg[0].initData);
           initialized = true;
           console.log(JSON.stringify({initSuccess: true}));
         } catch (e) {
