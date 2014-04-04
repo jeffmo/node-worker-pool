@@ -14,8 +14,11 @@ function WorkerPool(numWorkers, workerPath, workerArgs, options) {
   this._availableWorkers = [];
   this._allWorkers = [];
   this._isDestroyed = false;
-  this._pendingResponses = [];
+  this._allPendingResponses = [];
+  this._pendingMessageToAllWorkers = Q();
   this._queuedMessages = [];
+  this._queuedWorkerSpecificMessages = {};
+  this._workerPendingResponses = {};
 
   if (!options.lazyBoot) {
     this._eagerBootAllWorkers();
@@ -30,7 +33,7 @@ WorkerPool.prototype._bootNewWorker = function() {
     workerName: workerID
   });
   this._allWorkers.push(worker);
-  this._availableWorkers.push(worker);
+  this._availableWorkers.push(workerID);
 };
 
 WorkerPool.prototype._eagerBootAllWorkers = function() {
@@ -39,19 +42,27 @@ WorkerPool.prototype._eagerBootAllWorkers = function() {
   }
 };
 
-WorkerPool.prototype._sendMessageToWorker = function(worker, msg) {
-  var workerID = worker._opts && worker._opts.workerName;
-  return worker.sendMessage(msg).then(function(response) {
-    if (this._queuedMessages.length > 0) {
+WorkerPool.prototype._sendMessageToWorker = function(workerID, msg) {
+  var worker = this._allWorkers[workerID];
+  var pendingResponse = worker.sendMessage(msg).then(function(response) {
+    if (this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)) {
+      var queuedMsg = this._queuedWorkerSpecificMessages[workerID];
+      delete this._queuedWorkerSpecificMessages[workerID];
+      this._sendMessageToWorker(workerID, queuedMsg.msg).done(function(response) {
+        queuedMsg.deferred.resolve(response);
+      });
+    } else if (this._queuedMessages.length > 0) {
       var queuedMsg = this._queuedMessages.shift();
-      this._sendMessageToWorker(worker, queuedMsg.msg).done(function(response) {
+      this._sendMessageToWorker(workerID, queuedMsg.msg).done(function(response) {
         queuedMsg.deferred.resolve(response);
       })
     } else {
-      this._availableWorkers.push(worker);
+      this._availableWorkers.push(workerID);
+      delete this._workerPendingResponses[workerID];
     }
     return response;
   }.bind(this));
+  return this._workerPendingResponses[workerID] = pendingResponse;
 };
 
 WorkerPool.prototype.sendMessage = function(msg) {
@@ -82,15 +93,49 @@ WorkerPool.prototype.sendMessage = function(msg) {
     responsePromise = deferred.promise;
   }
 
-  this._pendingResponses.push(responsePromise);
+  this._allPendingResponses.push(responsePromise);
   return responsePromise;
+};
+
+WorkerPool.prototype.sendMessageToAllWorkers = function(msg) {
+  if (this._isDestroyed) {
+    throw new Error(
+      'Attempted to send a message after the worker pool has alread been ' +
+      '(or is in the process of) shutting down!'
+    );
+  }
+
+  this._pendingMessageToAllWorkers =
+    this._pendingMessageToAllWorkers.then(function() {
+      // Queue the message up for all currently busy workers
+      var busyWorkerResponses = [];
+      for (var workerID in this._workerPendingResponses) {
+        var deferred = Q.defer();
+        this._queuedWorkerSpecificMessages[workerID] = {
+          deferred: deferred,
+          msg: msg
+        };
+        busyWorkerResponses.push(deferred.promise);
+      }
+
+      // Send out the message to all workers that aren't currently busy
+      var availableWorkerResponses =
+        this._availableWorkers.map(function(workerID) {
+          return this._sendMessageToWorker(workerID, msg);
+        }, this);
+      this._availableWorkers = [];
+
+      return Q.all(availableWorkerResponses.concat(busyWorkerResponses));
+    }.bind(this));
+
+  return this._pendingMessageToAllWorkers;
 };
 
 WorkerPool.prototype.destroy = function() {
   var allWorkers = this._allWorkers;
 
   this._isDestroyed = true;
-  return Q.all(this._pendingResponses).then(function() {
+  return Q.all(this._allPendingResponses).then(function() {
     return Q.all(allWorkers.map(function(worker) {
       return worker.destroy();
     }));

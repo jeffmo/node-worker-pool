@@ -275,6 +275,110 @@ describe('WorkerPool', function() {
     });
   });
 
+  describe('sendMessageToAllWorkers', function() {
+    pit('sends message to all workers when all workers are free', function() {
+      var MESSAGE = {value: 1};
+      var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
+
+      var onAllResponses = pool.sendMessageToAllWorkers(MESSAGE);
+      mockRunTicksRepeatedly();
+
+      _workerSendMessageDeferreds.forEach(function(deferred) {
+        deferred.resolve();
+      });
+
+      expect(_getWorkerMessageSends()).toEqual([
+        [[MESSAGE]], // Worker 1
+        [[MESSAGE]] // Worker 2
+      ]);
+    });
+
+    pit('sends message to all workers when all workers are busy', function() {
+      var BUSY_MESSAGE = {value: 1};
+      var MESSAGE_TO_ALL = {value: 2};
+      var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
+
+      // Occupy all children
+      pool.sendMessage(BUSY_MESSAGE);
+      pool.sendMessage(BUSY_MESSAGE);
+      mockRunTicksRepeatedly();
+
+      // Confirm that BUSY_MESSAGE was sent to all children
+      expect(_getWorkerMessageSends()).toEqual([
+        [[BUSY_MESSAGE]], // Worker 1
+        [[BUSY_MESSAGE]] // Worker 2
+      ]);
+
+      // Send a message to all workers while they're all busy
+      var onAllResponses = pool.sendMessageToAllWorkers(MESSAGE_TO_ALL);
+      mockRunTicksRepeatedly();
+
+      // Simulate responses for the busy work
+      _workerSendMessageDeferreds.forEach(function(deferred) {
+        deferred.resolve();
+      });
+      mockRunTicksRepeatedly();
+
+      // Simulate responses for the messages sent to all workers
+      _workerSendMessageDeferreds.forEach(function(deferred) {
+        deferred.resolve();
+      });
+      mockRunTicksRepeatedly();
+
+      expect(_getWorkerMessageSends()).toEqual([
+        [[BUSY_MESSAGE], [MESSAGE_TO_ALL]], // Worker 1
+        [[BUSY_MESSAGE], [MESSAGE_TO_ALL]], // Worker 2
+      ]);
+    });
+
+    pit('does not send the message to the same worker twice', function() {
+      var BUSY_MESSAGE = {value: 1};
+      var MESSAGE_TO_ALL = {value: 2};
+      var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
+
+      // Occupy all children
+      pool.sendMessage(BUSY_MESSAGE);
+      pool.sendMessage(BUSY_MESSAGE);
+      mockRunTicksRepeatedly();
+
+      // Confirm that BUSY_MESSAGE was sent to all children
+      expect(_getWorkerMessageSends()).toEqual([
+        [[BUSY_MESSAGE]], // Worker 1
+        [[BUSY_MESSAGE]] // Worker 2
+      ]);
+
+      // Send a message to all workers while they're all busy
+      var onAllResponses = pool.sendMessageToAllWorkers(MESSAGE_TO_ALL);
+      mockRunTicksRepeatedly();
+
+      // Simulate response for the busy work on the first child
+      // (but leave the second child busy)
+      _workerSendMessageDeferreds[0].resolve();
+      mockRunTicksRepeatedly();
+
+      // Simulate response for the MESSAGE_TO_ALL sent to the first child
+      // (note that the second child is still occupied with the busy msg)
+      _workerSendMessageDeferreds[2].resolve();
+      mockRunTicksRepeatedly();
+
+      // Assert that only the first child has received the MESSAGE_TO_ALL
+      // (and it was not mistakenly sent twice to the first child)
+      expect(_getWorkerMessageSends()).toEqual([
+        [[BUSY_MESSAGE], [MESSAGE_TO_ALL]], // Worker 1
+        [[BUSY_MESSAGE]] // Worker 2
+      ]);
+
+      // Finally simulate a response for the busy work on the first child
+      _workerSendMessageDeferreds[1].resolve();
+      mockRunTicksRepeatedly();
+
+      expect(_getWorkerMessageSends()).toEqual([
+        [[BUSY_MESSAGE], [MESSAGE_TO_ALL]], // Worker 1
+        [[BUSY_MESSAGE], [MESSAGE_TO_ALL]] // Worker 2
+      ]);
+    });
+  });
+
   describe('destroy', function() {
     pit('destroys all workers', function() {
       var pool = new WorkerPool(3, FAKE_PATH, FAKE_ARGS);
