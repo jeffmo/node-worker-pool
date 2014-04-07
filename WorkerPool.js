@@ -15,7 +15,6 @@ function WorkerPool(numWorkers, workerPath, workerArgs, options) {
   this._allWorkers = [];
   this._isDestroyed = false;
   this._allPendingResponses = [];
-  this._pendingMessageToAllWorkers = Q();
   this._queuedMessages = [];
   this._queuedWorkerSpecificMessages = {};
   this._workerPendingResponses = {};
@@ -105,30 +104,24 @@ WorkerPool.prototype.sendMessageToAllWorkers = function(msg) {
     );
   }
 
-  this._pendingMessageToAllWorkers =
-    this._pendingMessageToAllWorkers.then(function() {
-      // Queue the message up for all currently busy workers
-      var busyWorkerResponses = [];
-      for (var workerID in this._workerPendingResponses) {
-        var deferred = Q.defer();
-        this._queuedWorkerSpecificMessages[workerID] = {
-          deferred: deferred,
-          msg: msg
-        };
-        busyWorkerResponses.push(deferred.promise);
-      }
+  // Queue the message up for all currently busy workers
+  var busyWorkerResponses = [];
+  for (var workerID in this._workerPendingResponses) {
+    var deferred = Q.defer();
+    this._queuedWorkerSpecificMessages[workerID] = {
+      deferred: deferred,
+      msg: msg
+    };
+    busyWorkerResponses.push(deferred.promise);
+  }
 
-      // Send out the message to all workers that aren't currently busy
-      var availableWorkerResponses =
-        this._availableWorkers.map(function(workerID) {
-          return this._sendMessageToWorker(workerID, msg);
-        }, this);
-      this._availableWorkers = [];
+  // Send out the message to all workers that aren't currently busy
+  var availableWorkerResponses = this._availableWorkers.map(function(workerID) {
+    return this._sendMessageToWorker(workerID, msg);
+  }, this);
+  this._availableWorkers = [];
 
-      return Q.all(availableWorkerResponses.concat(busyWorkerResponses));
-    }.bind(this));
-
-  return this._pendingMessageToAllWorkers;
+  return Q.all(availableWorkerResponses.concat(busyWorkerResponses));
 };
 
 WorkerPool.prototype.destroy = function() {
