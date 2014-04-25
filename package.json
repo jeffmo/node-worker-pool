@@ -5,6 +5,10 @@
     "q": "~0.9.7"
   },
   "main": "WorkerPool",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeffmo/node-worker-pool"
+  },
   "scripts": {
     "test": "node node_modules/jest/bin/runTests.js --config=testConfig.json"
   }
