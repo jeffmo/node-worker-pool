@@ -60,10 +60,15 @@ __workerPool.js__
 ```js
 if (require.main === module) {
   var workerPool = new WorkerPool(
-    8, // number of workers
+    8,                // number of workers
     process.execPath, // path to the node binary
-    './worker.js', // path to the worker script
-    {initData: {someUsefulConstant: 42}}
+    './worker.js',    // path to the worker script
+    {
+      // The initData object that is passed to each worker exactly once before
+      // any messages get sent. Workers receive this object via their
+      // onInitialize callback.
+      initData: {someUsefulConstant: 42}
+    }
   );
 
   workerPool.sendMessage({message: 'hai!'}).then(function(response) {
