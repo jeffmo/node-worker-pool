@@ -62,7 +62,8 @@ if (require.main === module) {
   var workerPool = new WorkerPool(
     8, // number of workers
     process.execPath, // path to the node binary
-    './worker.js' // path to the worker script
+    './worker.js', // path to the worker script
+    {initData: {someUsefulConstant: 42}}
   );
 
   workerPool.sendMessage({message: 'hai!'}).then(function(response) {
