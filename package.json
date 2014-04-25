@@ -1,6 +1,6 @@
 {
   "name": "node-worker-pool",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "dependencies": {
     "q": "~0.9.7"
   },
