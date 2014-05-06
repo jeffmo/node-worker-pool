@@ -429,5 +429,76 @@ describe('WorkerPool', function() {
         expect(poolIsDestroyed).toBe(true);
       });
     });
+
+    pit('waits for pending messages to finish before resolving', function() {
+      var MESSAGE1 = {value: 1};
+      var MESSAGE2 = {value: 2};
+
+      var pool = new WorkerPool(3, FAKE_PATH, FAKE_ARGS);
+      pool.sendMessage(MESSAGE1);
+      pool.sendMessage(MESSAGE2);
+      mockRunTicksRepeatedly();
+
+      var poolIsDestroyed = false;
+      var destroyPool = pool.destroy().then(function() {
+        poolIsDestroyed = true;
+      });
+      mockRunTicksRepeatedly();
+      expect(poolIsDestroyed).toBe(false);
+
+      // Resolve pending message responses
+      _workerSendMessageDeferreds.forEach(function(deferred) {
+        deferred.resolve({response: 'hai!'});
+      });
+      mockRunTicksRepeatedly();
+
+      // But we're still waiting on workers to actually destroy themselves...
+      expect(poolIsDestroyed).toBe(false);
+
+      // Resolve worker destroy deferreds
+      _workerDestroyDeferreds.forEach(function(workerDestroyDeferred) {
+        workerDestroyDeferred.resolve();
+      });
+      mockRunTicksRepeatedly();
+
+      expect(poolIsDestroyed).toBe(true);
+    });
+
+    pit('resolves when waiting on pending response that errors', function() {
+      var MESSAGE1 = {value: 1};
+      var MESSAGE2 = {value: 2};
+
+      var pool = new WorkerPool(3, FAKE_PATH, FAKE_ARGS);
+      pool.sendMessage(MESSAGE1);
+      pool.sendMessage(MESSAGE2);
+      mockRunTicksRepeatedly();
+
+      var poolIsDestroyed = false;
+      var destroyPool = pool.destroy().then(function() {
+        poolIsDestroyed = true;
+      });
+      mockRunTicksRepeatedly();
+      expect(poolIsDestroyed).toBe(false);
+
+      // Reject one of the pending message responses
+      _workerSendMessageDeferreds.pop().reject({error: 'Worker Message Error!'});
+
+      // Resolve pending message responses
+      _workerSendMessageDeferreds.forEach(function(deferred) {
+        deferred.resolve({response: 'hai!'});
+      });
+      mockRunTicksRepeatedly();
+
+      // But we're still waiting on workers to actually destroy themselves...
+      expect(poolIsDestroyed).toBe(false);
+
+      // Resolve worker destroy deferreds
+      _workerDestroyDeferreds.forEach(function(workerDestroyDeferred) {
+        workerDestroyDeferred.resolve();
+      });
+      mockRunTicksRepeatedly();
+
+      expect(poolIsDestroyed).toBe(true);
+    });
   });
 });

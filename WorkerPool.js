@@ -135,11 +135,12 @@ WorkerPool.prototype.destroy = function() {
   var allWorkers = this._allWorkers;
 
   this._isDestroyed = true;
-  return Q.all(this._allPendingResponses).then(function() {
-    return Q.all(allWorkers.map(function(worker) {
-      return worker.destroy();
-    }));
-  });
+  return Q.allSettled(this._allPendingResponses)
+    .then(function() {
+      return Q.all(allWorkers.map(function(worker) {
+        return worker.destroy();
+      }));
+    });
 };
 
 module.exports = WorkerPool;
