@@ -221,6 +221,26 @@ describe('WorkerPool', function() {
       ]);
     });
 
+    pit('successfully moves on to next msg if first msg errored', function() {
+      var MESSAGE1 = {value: 1};
+      var MESSAGE2 = {value: 2};
+      var pool = new WorkerPool(1, FAKE_PATH, FAKE_ARGS);
+      pool.sendMessage(MESSAGE1);
+      pool.sendMessage(MESSAGE2);
+
+      expect(_getAllMessageSends()).toMatchArraySet([
+        MESSAGE1
+      ]);
+
+      _workerSendMessageDeferreds[0].reject();
+      mockRunTicksRepeatedly();
+
+      expect(_getAllMessageSends()).toMatchArraySet([
+        MESSAGE1,
+        MESSAGE2
+      ]);
+    });
+
     pit('throws when sending a message after being destroyed', function() {
       var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
       pool.destroy();
