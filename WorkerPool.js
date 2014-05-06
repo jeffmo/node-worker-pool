@@ -47,14 +47,22 @@ WorkerPool.prototype._sendMessageToWorker = function(workerID, msg) {
     if (this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)) {
       var queuedMsg = this._queuedWorkerSpecificMessages[workerID];
       delete this._queuedWorkerSpecificMessages[workerID];
-      this._sendMessageToWorker(workerID, queuedMsg.msg).done(function(response) {
-        queuedMsg.deferred.resolve(response);
-      });
+      this._sendMessageToWorker(workerID, queuedMsg.msg)
+        .catch(function(err) {
+          queuedMsg.deferred.reject(err);
+        })
+        .done(function(response) {
+          queuedMsg.deferred.resolve(response);
+        });
     } else if (this._queuedMessages.length > 0) {
       var queuedMsg = this._queuedMessages.shift();
-      this._sendMessageToWorker(workerID, queuedMsg.msg).done(function(response) {
-        queuedMsg.deferred.resolve(response);
-      })
+      this._sendMessageToWorker(workerID, queuedMsg.msg)
+        .catch(function(err) {
+          queuedMsg.deferred.reject(err);
+        })
+        .done(function(response) {
+          queuedMsg.deferred.resolve(response);
+        })
     } else {
       this._availableWorkers.push(workerID);
       delete this._workerPendingResponses[workerID];

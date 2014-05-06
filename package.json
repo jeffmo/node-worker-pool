@@ -10,6 +10,6 @@
     "url": "https://github.com/jeffmo/node-worker-pool"
   },
   "scripts": {
-    "test": "node node_modules/jest/bin/runTests.js --config=testConfig.json"
+    "test": "node node_modules/jest/bin/jest.js --config=testConfig.json"
   }
 }
