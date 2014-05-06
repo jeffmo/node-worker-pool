@@ -247,6 +247,26 @@ describe('Worker', function() {
       mockRunTicksRepeatedly();
       expect(mockChildren[0].kill.mock.calls.length).toBe(1);
     });
+
+    pit('destroys even when a pending message bubbles an error', function() {
+      var MESSAGE = {input: 42};
+
+      var worker = new Worker(FAKE_PATH, FAKE_ARGS);
+      _simulateInitResponse();
+      mockRunTicksRepeatedly();
+
+      worker.sendMessage(MESSAGE);
+      mockRunTicksRepeatedly();
+
+      worker.destroy();
+
+      var mockChildren = child_process.mockChildren;
+      expect(mockChildren[0].kill.mock.calls.length).toBe(0);
+
+      _simulateRawResponse(JSON.stringify({error: 'Error message'}));
+      mockRunTicksRepeatedly();
+      expect(mockChildren[0].kill.mock.calls.length).toBe(1);
+    });
   });
 
   describe('sendMessage', function() {
@@ -470,7 +490,7 @@ describe('Worker', function() {
       return _expectReject(promise);
     });
 
-    pit('throws when the worker has already been destoryed', function() {
+    pit('throws when the worker has already been destroyed', function() {
       var MESSAGE = {input: 42};
       var worker = new Worker(FAKE_PATH, FAKE_ARGS);
 

@@ -117,7 +117,7 @@ Worker.prototype.destroy = function() {
     ? this._initDeferred.promise
     : this._pendingResponseDeferred.promise;
 
-  return pendingWork.then(function() {
+  return pendingWork.finally(function() {
     this._childProcess.stdin.end();
     this._childProcess.kill();
   }.bind(this));
