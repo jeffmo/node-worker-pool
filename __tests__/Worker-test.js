@@ -357,6 +357,63 @@ describe('Worker', function() {
       });
     });
 
+    pit('allows second message after first message error response', function() {
+      var MESSAGE1 = {input: 42};
+      var MESSAGE2 = {input: 43};
+      var RESPONSE1 = {errorMsg: 'hai'};
+      var RESPONSE2 = {output: 43};
+
+      var worker = new Worker(FAKE_PATH, FAKE_ARGS);
+      _simulateInitResponse();
+      mockRunTicksRepeatedly();
+
+      var response1 = worker.sendMessage(MESSAGE1);
+      mockRunTicksRepeatedly();
+      _simulateRawResponse(JSON.stringify({error: RESPONSE1}));
+
+      return response1.catch(function(response) {
+        expect(response).toEqual(RESPONSE1);
+
+        var response2 = worker.sendMessage(MESSAGE2);
+        mockRunTicksRepeatedly();
+        _simulateResponse(RESPONSE2);
+
+        return response2;
+      }).then(function(response) {
+        expect(response).toEqual(RESPONSE2);
+      });
+    });
+
+    pit('allows second message after malformed response', function() {
+      var MESSAGE1 = {input: 42};
+      var MESSAGE2 = {input: 43};
+      var RESPONSE1 = {IIMM: 'CRRAAZYY'};
+      var RESPONSE2 = {output: 43};
+
+      var worker = new Worker(FAKE_PATH, FAKE_ARGS);
+      _simulateInitResponse();
+      mockRunTicksRepeatedly();
+
+      var response1 = worker.sendMessage(MESSAGE1);
+      mockRunTicksRepeatedly();
+      var rawResponse = JSON.stringify({UNEXPECTED: RESPONSE1});
+      _simulateRawResponse(rawResponse);
+
+      return response1.catch(function(response) {
+        expect(response).toEqual(new Error(
+          'Malformed child response message: ' + rawResponse
+        ));
+
+        var response2 = worker.sendMessage(MESSAGE2);
+        mockRunTicksRepeatedly();
+        _simulateResponse(RESPONSE2);
+
+        return response2;
+      }).then(function(response) {
+        expect(response).toEqual(RESPONSE2);
+      });
+    });
+
     pit('handles chunked responses', function() {
       var MESSAGE = {input: 42};
       var RESPONSE = {output: 43};

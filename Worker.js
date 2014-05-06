@@ -44,7 +44,6 @@ Worker.prototype._handleMessageResponse = function(response) {
     this._pendingResponseDeferred.reject(response.error);
   } else if (response.hasOwnProperty('response')) {
     this._pendingResponseDeferred.resolve(response.response);
-    this._pendingResponseDeferred = null;
   } else {
     this._pendingResponseDeferred.reject(
       new Error(
@@ -52,6 +51,7 @@ Worker.prototype._handleMessageResponse = function(response) {
       )
     );
   }
+  this._pendingResponseDeferred = null;
 };
 
 Worker.prototype._onStderr = function(data) {
