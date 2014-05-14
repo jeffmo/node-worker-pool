@@ -10,6 +10,13 @@
     "url": "https://github.com/jeffmo/node-worker-pool"
   },
   "scripts": {
-    "test": "node node_modules/jest/bin/jest.js --config=testConfig.json"
+    "test": "jest"
+  },
+  "devDependencies": {
+    "jest-cli": "0.0.10-pre"
+  },
+  "jest": {
+    "modulePathIgnorePatterns": ["node_modules"],
+    "testPathIgnorePatterns": ["node_modules"]
   }
 }

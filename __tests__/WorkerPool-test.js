@@ -1,4 +1,4 @@
-require('mock-modules')
+jest
   .autoMockOff()
   .mock('../Worker');
 
@@ -73,7 +73,6 @@ describe('WorkerPool', function() {
   }
 
   beforeEach(function() {
-    require('mock-modules').dumpCache();
     Q = require('q');
     Worker = require('../Worker');
     WorkerPool = require('../WorkerPool');
@@ -130,7 +129,7 @@ describe('WorkerPool', function() {
     });
   });
 
-  describe('worker booting', function() {
+  describe.only('worker booting', function() {
     pit('eagerly boots all workers by default', function() {
       new WorkerPool(3, FAKE_PATH, FAKE_ARGS, {
         initData: FAKE_INIT_DATA

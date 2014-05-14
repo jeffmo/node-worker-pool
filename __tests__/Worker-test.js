@@ -1,4 +1,4 @@
-require('mock-modules')
+jest
   .autoMockOff()
   .mock('child_process');
 
@@ -36,7 +36,6 @@ describe('Worker', function() {
   }
 
   beforeEach(function() {
-    require('mock-modules').dumpCache();
     child_process = require('child_process');
     Worker = require('../Worker');
   });
