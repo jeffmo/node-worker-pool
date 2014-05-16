@@ -13,7 +13,7 @@
     "test": "jest"
   },
   "devDependencies": {
-    "jest-cli": "0.0.10-pre"
+    "jest-cli": "0.1.5"
   },
   "jest": {
     "modulePathIgnorePatterns": ["node_modules"],
