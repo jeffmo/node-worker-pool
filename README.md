@@ -1,4 +1,4 @@
-# node-worker-pool
+# node-worker-pool [![Build Status](https://travis-ci.org/jeffmo/node-worker-pool.svg?branch=master)](https://travis-ci.org/jeffmo/node-worker-pool)
 
 node-worker-pool is a library for managing a pool of child workers in node.
 
