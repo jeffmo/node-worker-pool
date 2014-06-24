@@ -44,9 +44,9 @@ WorkerPool.prototype._eagerBootAllWorkers = function() {
 WorkerPool.prototype._sendMessageToWorker = function(workerID, msg) {
   var worker = this._allWorkers[workerID];
   var pendingResponse = worker.sendMessage(msg).finally(function(response) {
-    if (this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)) {
-      var queuedMsg = this._queuedWorkerSpecificMessages[workerID];
-      delete this._queuedWorkerSpecificMessages[workerID];
+    if (this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)
+        && this._queuedWorkerSpecificMessages[workerID].length > 0) {
+      var queuedMsg = this._queuedWorkerSpecificMessages[workerID].shift();
       this._sendMessageToWorker(workerID, queuedMsg.msg)
         .catch(function(err) {
           queuedMsg.deferred.reject(err);
@@ -115,10 +115,13 @@ WorkerPool.prototype.sendMessageToAllWorkers = function(msg) {
   var busyWorkerResponses = [];
   for (var workerID in this._workerPendingResponses) {
     var deferred = Q.defer();
-    this._queuedWorkerSpecificMessages[workerID] = {
+    if (!this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)) {
+      this._queuedWorkerSpecificMessages[workerID] = [];
+    }
+    this._queuedWorkerSpecificMessages[workerID].push({
       deferred: deferred,
       msg: msg
-    };
+    });
     busyWorkerResponses.push(deferred.promise);
   }
 
