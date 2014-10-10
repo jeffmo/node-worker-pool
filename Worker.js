@@ -8,6 +8,7 @@ function Worker(workerPath, workerArgs, options) {
   options = options || {}
 
   var child = child_process.spawn(workerPath, workerArgs);
+  child.on('exit', this._onChildExit.bind(this));
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', this._onStderr.bind(this));
   child.stdout.setEncoding('utf8');
@@ -17,8 +18,11 @@ function Worker(workerPath, workerArgs, options) {
   this._isDestroyed = false;
   this._opts = options;
   this._pendingResponseDeferred = null;
+  this._stderrData = '';
   this._stdoutData = '';
   this._streamParser = new JSONStreamParser();
+  this._workerArgs = workerArgs;
+  this._workerPath = workerPath;
 
   // Send init data to the child first thing
   this._initDeferred = Q.defer();
@@ -54,7 +58,37 @@ Worker.prototype._handleMessageResponse = function(response) {
   this._pendingResponseDeferred = null;
 };
 
+Worker.prototype._onChildExit = function(code, signalStr) {
+  if (this._isDestroyed) {
+    return;
+  }
+
+  var errorMsg =
+    ' exit code: ' + code + ', exit signal: ' + signalStr + '\n' +
+    'stderr:\n' +
+    '  ' + this._stderrData.trim() + '\n' +
+    '\n' +
+    'stdout:\n' +
+    '  ' + this._stdoutData.trim();
+
+  if (this._initialized === false) {
+    throw new Error(
+      'Worker process exited before it could be initialized!' +
+      errorMsg
+    );
+  } else if (this._pendingResponseDeferred !== null) {
+    this._pendingResponseDeferred.reject(new Error(
+      'Worker process exited before responding!' +
+      errorMsg
+    ));
+  }
+
+  // Try re-booting this worker
+  Worker.call(this, this._workerPath, this._workerArgs, this._opts);
+};
+
 Worker.prototype._onStderr = function(data) {
+  this._stderrData += data;
   process.stderr.write(data);
 };
 
@@ -134,7 +168,7 @@ Worker.prototype.sendMessage = function(messageObj) {
   if (this._pendingResponseDeferred !== null) {
     throw new Error(
       'Attempted to send a message to the worker before the response from ' +
-      'the last message was received! Child processes can only handle one ' +
+      'the last message was received! Worker processes can only handle one ' +
       'message at a time.'
     );
   }

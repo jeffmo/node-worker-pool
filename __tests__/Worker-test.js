@@ -21,6 +21,32 @@ describe('Worker', function() {
     });
   }
 
+  function _expectRejection(promise, expectedError) {
+    var rejection = null;
+    promise.catch(function(err) {
+      rejection = err;
+    });
+
+    var resolution = null;
+    promise.then(function(result) {
+      resolution = result;
+    });
+
+    jest.runAllTicks();
+
+    if (rejection === null) {
+      var msg = 'Expected promise to be rejected, but instead it was ';
+      if (resolution === null) {
+        msg += 'not settled at all!';
+      } else {
+        msg += 'resolved.';
+      }
+      throw new Error(msg);
+    } else if (expectedError !== undefined) {
+      expect(rejection).toEqual(expectedError);
+    }
+  }
+
   function _simulateInitResponse() {
     _simulateRawResponse(JSON.stringify({initSuccess: true}));
   }
@@ -110,13 +136,13 @@ describe('Worker', function() {
         var worker = new Worker(FAKE_PATH, FAKE_ARGS);
 
         _simulateInitResponse();
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         worker.sendMessage(MESSAGE);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         _simulateResponse(RESPONSE);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         expect(console.log.mock.calls.length).toBe(0);
       });
@@ -130,13 +156,13 @@ describe('Worker', function() {
         });
 
         _simulateInitResponse();
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         worker.sendMessage(MESSAGE);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         _simulateResponse(RESPONSE);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         expect(console.log.mock.calls.length).toBe(0);
       });
@@ -148,13 +174,13 @@ describe('Worker', function() {
         });
 
         _simulateInitResponse();
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         worker.sendMessage(MESSAGE);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         _simulateResponse(RESPONSE);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         expect(console.log.mock.calls).toEqual([
           [
@@ -183,13 +209,13 @@ describe('Worker', function() {
         });
 
         _simulateInitResponse();
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         worker.sendMessage(MESSAGE);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         _simulateResponse(RESPONSE);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
 
         expect(console.log.mock.calls).toEqual([
           [
@@ -220,7 +246,7 @@ describe('Worker', function() {
       expect(mockChildren[0].kill.mock.calls.length).toBe(0);
 
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       expect(mockChildren[0].kill.mock.calls.length).toBe(1);
     });
@@ -232,10 +258,10 @@ describe('Worker', function() {
 
       var worker = new Worker(FAKE_PATH, FAKE_ARGS, {initData: INIT_DATA});
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       worker.sendMessage(MESSAGE);
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       worker.destroy();
 
@@ -243,7 +269,7 @@ describe('Worker', function() {
       expect(mockChildren[0].kill.mock.calls.length).toBe(0);
 
       _simulateResponse(RESPONSE);
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
       expect(mockChildren[0].kill.mock.calls.length).toBe(1);
     });
 
@@ -252,10 +278,10 @@ describe('Worker', function() {
 
       var worker = new Worker(FAKE_PATH, FAKE_ARGS);
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       worker.sendMessage(MESSAGE);
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       worker.destroy();
 
@@ -263,13 +289,13 @@ describe('Worker', function() {
       expect(mockChildren[0].kill.mock.calls.length).toBe(0);
 
       _simulateRawResponse(JSON.stringify({error: 'Error message'}));
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
       expect(mockChildren[0].kill.mock.calls.length).toBe(1);
     });
   });
 
   describe('sendMessage', function() {
-    pit('queues messages to be sent only after initialization', function() {
+    it('queues messages to be sent only after initialization', function() {
       var INIT_DATA = {init: 7};
       var MESSAGE = {input: 42};
       var worker = new Worker(FAKE_PATH, FAKE_ARGS, {initData: INIT_DATA});
@@ -281,7 +307,7 @@ describe('Worker', function() {
       ]);
 
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       expect(mockChildren[0].stdin.write.mock.calls).toEqual([
         [JSON.stringify({initData: INIT_DATA})],
@@ -289,16 +315,16 @@ describe('Worker', function() {
       ]);
     });
 
-    pit('sends messages sent after initialization', function() {
+    it('sends messages sent after initialization', function() {
       var INIT_DATA = {init: 7};
       var MESSAGE = {input: 42};
       var worker = new Worker(FAKE_PATH, FAKE_ARGS, {initData: INIT_DATA});
 
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       worker.sendMessage(MESSAGE);
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       var mockChildren = child_process.mockChildren;
       expect(mockChildren[0].stdin.write.mock.calls).toEqual([
@@ -307,10 +333,10 @@ describe('Worker', function() {
       ]);
     });
 
-    pit('throws when child writes an unexpected response', function() {
+    it('throws when child writes an unexpected response', function() {
       new Worker(FAKE_PATH, FAKE_ARGS);
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       // No message was sent to the worker, so if the child sends us a response
       // the worker should throw
@@ -322,29 +348,34 @@ describe('Worker', function() {
       );
     });
 
-    pit('resolves when a response is received', function() {
+    it('resolves when a response is received', function() {
       var MESSAGE = {input: 42};
       var RESPONSE = {output: 43};
       var promise = new Worker(FAKE_PATH, FAKE_ARGS).sendMessage(MESSAGE);
 
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       _simulateResponse(RESPONSE);
 
-      return promise.then(function(response) {
+      var responseReceived = false;
+      promise.then(function(response) {
+        responseReceived = true;
         expect(response).toEqual(RESPONSE);
       });
+
+      jest.runAllTicks();
+      expect(responseReceived).toBe(true);
     });
 
-    pit('throws when sending a second message before 1st response', function() {
+    it('throws when sending a second message before 1st response', function() {
       var worker = new Worker(FAKE_PATH, FAKE_ARGS);
       worker.sendMessage({messageNumber: 1});
       expect(function() {
         worker.sendMessage({messageNumber: 2});
       }).toThrow(
         'Attempted to send a message to the worker before the response from ' +
-        'the last message was received! Child processes can only handle one ' +
+        'the last message was received! Worker processes can only handle one ' +
         'message at a time.'
       );
     });
@@ -357,17 +388,17 @@ describe('Worker', function() {
 
       var worker = new Worker(FAKE_PATH, FAKE_ARGS);
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       var response1 = worker.sendMessage(MESSAGE1);
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
       _simulateResponse(RESPONSE1);
 
       return response1.then(function(response) {
         expect(response).toEqual(RESPONSE1);
 
         var response2 = worker.sendMessage(MESSAGE2);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
         _simulateResponse(RESPONSE2);
 
         return response2;
@@ -384,17 +415,17 @@ describe('Worker', function() {
 
       var worker = new Worker(FAKE_PATH, FAKE_ARGS);
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       var response1 = worker.sendMessage(MESSAGE1);
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
       _simulateRawResponse(JSON.stringify({error: RESPONSE1}));
 
       return response1.catch(function(response) {
         expect(response).toEqual(RESPONSE1);
 
         var response2 = worker.sendMessage(MESSAGE2);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
         _simulateResponse(RESPONSE2);
 
         return response2;
@@ -411,10 +442,10 @@ describe('Worker', function() {
 
       var worker = new Worker(FAKE_PATH, FAKE_ARGS);
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       var response1 = worker.sendMessage(MESSAGE1);
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
       var rawResponse = JSON.stringify({UNEXPECTED: RESPONSE1});
       _simulateRawResponse(rawResponse);
 
@@ -424,7 +455,7 @@ describe('Worker', function() {
         ));
 
         var response2 = worker.sendMessage(MESSAGE2);
-        mockRunTicksRepeatedly();
+        jest.runAllTicks();
         _simulateResponse(RESPONSE2);
 
         return response2;
@@ -439,7 +470,7 @@ describe('Worker', function() {
       var promise = new Worker(FAKE_PATH, FAKE_ARGS).sendMessage(MESSAGE);
 
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       var fullResponse = JSON.stringify({response: RESPONSE});
       var firstHalf = fullResponse.substr(0, 4);
@@ -452,16 +483,17 @@ describe('Worker', function() {
       });
     });
 
-    pit('rejects when an error is received', function() {
+    it('rejects when an error is received', function() {
       var MESSAGE = {input: 42};
       var ERROR = 'This is an error message!';
       var promise = new Worker(FAKE_PATH, FAKE_ARGS).sendMessage(MESSAGE);
 
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
       _simulateRawResponse(JSON.stringify({error: ERROR}));
+      jest.runAllTicks();
 
-      return _expectReject(promise, ERROR);
+      _expectRejection(promise, ERROR);
     });
 
     pit('rejects when malformed response is received', function() {
@@ -469,7 +501,7 @@ describe('Worker', function() {
       var promise = new Worker(FAKE_PATH, FAKE_ARGS).sendMessage(MESSAGE);
 
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
       _simulateRawResponse(JSON.stringify({UNEXPECTED: 'blah'}));
 
       return _expectReject(promise);
@@ -481,7 +513,7 @@ describe('Worker', function() {
       var promise = new Worker(FAKE_PATH, FAKE_ARGS).sendMessage(MESSAGE);
 
       _simulateInitResponse();
-      mockRunTicksRepeatedly();
+      jest.runAllTicks();
 
       var responseStr = JSON.stringify({response: RESPONSE});
       _simulateRawResponse(responseStr + responseStr);
@@ -489,7 +521,7 @@ describe('Worker', function() {
       return _expectReject(promise);
     });
 
-    pit('throws when the worker has already been destroyed', function() {
+    it('throws when the worker has already been destroyed', function() {
       var MESSAGE = {input: 42};
       var worker = new Worker(FAKE_PATH, FAKE_ARGS);
 
@@ -501,6 +533,80 @@ describe('Worker', function() {
         'Attempted to send a message to a worker that has been (or is in the ' +
         'process of being) destroyed!'
       );
+    });
+
+    it('throws when child process exits before initializing', function() {
+      var MESSAGE = {input: 42};
+      var promise = new Worker(FAKE_PATH, FAKE_ARGS).sendMessage(MESSAGE);
+
+      //_simulateInitResponse();
+      //jest.runAllTicks();
+
+      var mockChild = child_process.mockChildren[0];
+      var exitCallbacks = mockChild.on.mock.calls
+        .filter(function(call) {
+          if (call[0] === 'exit') {
+            return true;
+          }
+        })
+        .map(function(call) {
+          return call[1];
+        });
+
+      expect(exitCallbacks.length).toBe(1);
+      expect(function() {
+        exitCallbacks[0](1, 'SIGINT');
+      }).toThrow();
+    });
+
+    it('rejects when child process exits before responding', function() {
+      var MESSAGE = {input: 42};
+      var promise = new Worker(FAKE_PATH, FAKE_ARGS).sendMessage(MESSAGE);
+
+      _simulateInitResponse();
+      jest.runAllTicks();
+
+      var mockChild = child_process.mockChildren[0];
+      mockChild.on.mock.calls
+        .filter(function(call) {
+          if (call[0] === 'exit') {
+            return true;
+          }
+        })
+        .forEach(function(call) {
+          var exitCallback = call[1];
+          exitCallback(1, 'SIGINT');
+        });
+
+      _expectRejection(promise);
+    });
+
+    it('attempts to re-boot the child process if the process exits before ' +
+       'responding to a message', function() {
+      var MESSAGE = {input: 42};
+      var promise = new Worker(FAKE_PATH, FAKE_ARGS).sendMessage(MESSAGE);
+
+      _simulateInitResponse();
+      jest.runAllTicks();
+
+      expect(child_process.mockChildren.length).toBe(1);
+      var mockChild = child_process.mockChildren[0];
+      mockChild.on.mock.calls
+        .filter(function(call) {
+          if (call[0] === 'exit') {
+            return true;
+          }
+        })
+        .forEach(function(call) {
+          var exitCallback = call[1];
+          exitCallback(1, 'SIGINT');
+        });
+
+      _expectRejection(promise);
+
+      // After rejection, the Worker should have attempted to spawn a second
+      // child process to replace the failed first process
+      expect(child_process.mockChildren.length).toBe(2);
     });
   });
 });
