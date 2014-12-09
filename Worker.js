@@ -19,7 +19,6 @@ function Worker(workerPath, workerArgs, options) {
   this._opts = options;
   this._pendingResponseDeferred = null;
   this._stderrData = '';
-  this._stdoutData = '';
   this._streamParser = new JSONStreamParser();
   this._workerArgs = workerArgs;
   this._workerPath = workerPath;
@@ -66,10 +65,7 @@ Worker.prototype._onChildExit = function(code, signalStr) {
   var errorMsg =
     ' exit code: ' + code + ', exit signal: ' + signalStr + '\n' +
     'stderr:\n' +
-    '  ' + this._stderrData.trim() + '\n' +
-    '\n' +
-    'stdout:\n' +
-    '  ' + this._stdoutData.trim();
+    '  ' + this._stderrData.trim() + '\n';
 
   if (this._initialized === false) {
     throw new Error(
@@ -97,13 +93,11 @@ Worker.prototype._onStdout = function(data) {
     throw new Error('Received unexpected data from child process: ' + data);
   }
 
-  this._stdoutData += data;
-
   var responses;
   try {
-    responses = this._streamParser.parse(this._stdoutData);
+    responses = this._streamParser.parse(data);
   } catch (e) {
-    e = new Error('Unable to parse child response data: ' + this._stdoutData);
+    e = new Error('Unable to parse child response data: ' + this._streamParser.getBuffer());
     if (this._initialized === false) {
       throw e;
     } else {

@@ -16,15 +16,13 @@ function respondWithResult(result) {
 function startWorker(onInitialize, onMessageReceived, onShutdown) {
   process.stdin.resume();
   process.stdin.setEncoding('utf8');
-  var inputData = '';
   var inputStreamParser = new JSONStreamParser();
 
   var initialized = false;
   var initData = null;
 
   process.stdin.on('data', function(data) {
-    inputData += data;
-    var rcvdMsg = inputStreamParser.parse(inputData);
+    var rcvdMsg = inputStreamParser.parse(data);
     if (rcvdMsg.length === 1) {
       if (initialized === false) {
         try {
