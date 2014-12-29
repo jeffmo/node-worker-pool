@@ -2,7 +2,7 @@
   "name": "node-worker-pool",
   "version": "2.4.3",
   "dependencies": {
-    "q": "~0.9.7"
+    "q": "^1.1.2"
   },
   "main": "WorkerPool",
   "repository": {
@@ -10,10 +10,12 @@
     "url": "https://github.com/jeffmo/node-worker-pool"
   },
   "scripts": {
-    "test": "jest"
+    "prepublish": "jest && jshint --config=.jshintrc --exclude=node_modules .",
+    "test": "jest && jshint --config=.jshintrc --exclude=node_modules ."
   },
   "devDependencies": {
-    "jest-cli": "^0.1.18"
+    "jest-cli": "^0.2.1",
+    "jshint": "^2.5.11"
   },
   "jest": {
     "modulePathIgnorePatterns": [

@@ -1,149 +1,137 @@
-"use strict";
+'use strict';
 
-var Q = require('q');
+var q = require('q');
 var Worker = require('./Worker');
 
-function WorkerPool(numWorkers, workerPath, workerArgs, options) {
-  options = options || {};
+var Promise = q.Promise;
 
-  this._numWorkers = numWorkers;
-  this._workerArgs = workerArgs;
-  this._workerPath = workerPath;
-  this._opts = options;
+var DEFAULT_OPTIONS = {
+  /**
+   * A debug option that tells all workers to print the raw response data they
+   * receive from their corresponding child process.
+   */
+  printChildResponses: false,
 
-  this._availableWorkers = [];
-  this._allWorkers = [];
-  this._isDestroyed = false;
-  this._allPendingResponses = [];
-  this._queuedMessages = [];
-  this._queuedWorkerSpecificMessages = {};
-  this._workerPendingResponses = {};
-
-  if (!options.lazyBoot) {
-    this._eagerBootAllWorkers();
-  }
+  /**
+   * Initialization data that each worker needs before it can be considered
+   * available and part of the pool.
+   */
+  workerInitData: null,
 };
 
-WorkerPool.prototype._bootNewWorker = function() {
-  var workerID = this._allWorkers.length;
-  var worker = new Worker(this._workerPath, this._workerArgs, {
-    initData: this._opts.initData,
-    printChildResponses: !!this._opts.printChildResponses,
-    workerName: workerID
+function _normalizeOptions(opts) {
+  var normOpts = {};
+  var optKey;
+
+  for (optKey in DEFAULT_OPTIONS) {
+    normOpts[optKey] = DEFAULT_OPTIONS[optKey];
+  }
+
+  for (optKey in opts) {
+    if (DEFAULT_OPTIONS[optKey] === undefined) {
+      throw new Error('Invalid WorkerPool option `' + optKey + '`!');
+    }
+    normOpts[optKey] = opts[optKey];
+  }
+
+  return normOpts;
+}
+
+function WorkerPool(numWorkers, workerPath, workerArgs, options) {
+  this._numWorkers = numWorkers;
+  this._opts = _normalizeOptions(options);
+  this._workerArgs = workerArgs;
+  this._workerPath = workerPath;
+
+  this._allWorkers = Object.create(null);
+  this._availableWorkers = [];
+  this._destructionResolver = null;
+  this._pendingDestroy = false;
+  this._pendingResponseCounter = 0;
+  this._queuedMessages = [];
+  this._uuidCounter = 1;
+
+  for (var i = 0; i < numWorkers; i++) {
+    this._bootNewWorker();
+  }
+}
+var WPp = WorkerPool.prototype;
+
+WPp.destroy = function() {
+  this._pendingDestroy = true;
+
+  var self = this;
+  return new Promise(function(resolve) {
+    self._destroyAllWorkers = function() {
+      var allWorkers = Object.keys(self._allWorkers).map(function(workerID) {
+        return self._allWorkers[workerID];
+      });
+      resolve(q.all(allWorkers.map(function(worker) {
+        return worker.destroy();
+      })));
+    };
+
+    if (self._pendingResponseCounter === 0) {
+      self._destroyAllWorkers();
+    }
   });
-  this._allWorkers.push(worker);
+};
+
+WPp.sendMessage = function(msg) {
+  if (this._pendingDestroy) {
+    throw new Error(
+      'Attempted to send a message after the worker pool has already been ' +
+      'or is in the process of shutting down!'
+    );
+  }
+
+  var self = this;
+  return new Promise(function(resolve) {
+    self._pendingResponseCounter++;
+    if (self._availableWorkers.length > 0) {
+      resolve(self._sendMessageToWorker(self._availableWorkers.shift(), msg));
+    } else {
+      self._queuedMessages.push({
+        msg: msg,
+        resolve: resolve
+      });
+    }
+  });
+};
+
+WPp._bootNewWorker = function() {
+  var workerID = this._uuidCounter++;
+  this._allWorkers[workerID] = new Worker(this._workerPath, this._workerArgs, {
+    initData: this._opts.workerInitData,
+    printChildResponses: this._opts.printChildResponses,
+    workerName: workerID,
+  });
   this._availableWorkers.push(workerID);
 };
 
-WorkerPool.prototype._eagerBootAllWorkers = function() {
-  while (this._allWorkers.length < this._numWorkers) {
-    this._bootNewWorker();
-  }
+WPp._destroyAllWorkers = function() {
+  var self = this;
+  return new Promise(function(resolve) {
+    // TODO
+  });
 };
 
-WorkerPool.prototype._sendMessageToWorker = function(workerID, msg) {
-  var worker = this._allWorkers[workerID];
-  var pendingResponse = worker.sendMessage(msg).finally(function(response) {
-    if (this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)
-        && this._queuedWorkerSpecificMessages[workerID].length > 0) {
-      var queuedMsg = this._queuedWorkerSpecificMessages[workerID].shift();
-      this._sendMessageToWorker(workerID, queuedMsg.msg)
-        .catch(function(err) {
-          queuedMsg.deferred.reject(err);
-        })
-        .done(function(response) {
-          queuedMsg.deferred.resolve(response);
-        });
-    } else if (this._queuedMessages.length > 0) {
-      var queuedMsg = this._queuedMessages.shift();
-      this._sendMessageToWorker(workerID, queuedMsg.msg)
-        .catch(function(err) {
-          queuedMsg.deferred.reject(err);
-        })
-        .done(function(response) {
-          queuedMsg.deferred.resolve(response);
-        })
-    } else {
-      this._availableWorkers.push(workerID);
-      delete this._workerPendingResponses[workerID];
-    }
-  }.bind(this));
-  return this._workerPendingResponses[workerID] = pendingResponse;
-};
-
-WorkerPool.prototype.sendMessage = function(msg) {
-  if (this._isDestroyed) {
-    throw new Error(
-      'Attempted to send a message after the worker pool has alread been ' +
-      '(or is in the process of) shutting down!'
-    );
-  }
-
-  if (this._opts.lazyBoot && this._allWorkers.length < this._numWorkers) {
-    this._bootNewWorker();
-  }
-
-  var responsePromise;
-  if (this._availableWorkers.length > 0) {
-     responsePromise = this._sendMessageToWorker(
-      this._availableWorkers.shift(),
-      msg
-    );
-  } else {
-    var queuedMsgID = this._queuedMessages.length;
-    var deferred = Q.defer();
-    this._queuedMessages.push({
-      deferred: deferred,
-      msg: msg
-    });
-    responsePromise = deferred.promise;
-  }
-
-  this._allPendingResponses.push(responsePromise);
-  return responsePromise;
-};
-
-WorkerPool.prototype.sendMessageToAllWorkers = function(msg) {
-  if (this._isDestroyed) {
-    throw new Error(
-      'Attempted to send a message after the worker pool has alread been ' +
-      '(or is in the process of) shutting down!'
-    );
-  }
-
-  // Queue the message up for all currently busy workers
-  var busyWorkerResponses = [];
-  for (var workerID in this._workerPendingResponses) {
-    var deferred = Q.defer();
-    if (!this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)) {
-      this._queuedWorkerSpecificMessages[workerID] = [];
-    }
-    this._queuedWorkerSpecificMessages[workerID].push({
-      deferred: deferred,
-      msg: msg
-    });
-    busyWorkerResponses.push(deferred.promise);
-  }
-
-  // Send out the message to all workers that aren't currently busy
-  var availableWorkerResponses = this._availableWorkers.map(function(workerID) {
-    return this._sendMessageToWorker(workerID, msg);
-  }, this);
-  this._availableWorkers = [];
-
-  return Q.all(availableWorkerResponses.concat(busyWorkerResponses));
-};
-
-WorkerPool.prototype.destroy = function() {
-  var allWorkers = this._allWorkers;
-
-  this._isDestroyed = true;
-  return Q.allSettled(this._allPendingResponses)
-    .then(function() {
-      return Q.all(allWorkers.map(function(worker) {
-        return worker.destroy();
-      }));
-    });
+WPp._sendMessageToWorker = function(workerID, msg) {
+  var self = this;
+  return new Promise(function(resolve) {
+    var worker = self._allWorkers[workerID];
+    resolve(worker.sendMessage(msg).finally(function() {
+      self._pendingResponseCounter--;
+      if (self._queuedMessages.length > 0) {
+        var queuedMsg = self._queuedMessages.shift();
+        queuedMsg.resolve(self._sendMessageToWorker(workerID, queuedMsg.msg));
+      } else {
+        if (self._pendingDestroy && self._pendingResponseCounter === 0) {
+          self._destroyAllWorkers();
+        }
+      }
+    }));
+  });
 };
 
 module.exports = WorkerPool;

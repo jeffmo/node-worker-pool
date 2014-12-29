@@ -1,9 +1,11 @@
+'use strict';
+
 var getMockFn = require('mocks').getMockFunction;
 var mockExports = require.generateMock('child_process');
 
 mockExports.mockChildren = [];
 
-mockExports.spawn.mockImplementation(function(path, args) {
+mockExports.spawn.mockImplementation(function() {
   var child = {
     kill: getMockFn(),
     on: getMockFn(),
