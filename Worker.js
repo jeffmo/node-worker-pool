@@ -4,6 +4,17 @@ var child_process = require('child_process');
 var JSONStreamParser = require('./lib/JSONStreamParser');
 var Q = require('q');
 
+function _middleTruncate(str, cutoffLength) {
+  if (str.length > cutoffLength) {
+    var halfCutoff = Math.floor(cutoffLength / 2);
+    str =
+      str.substr(0, halfCutoff) +
+      "\n[...truncated...]\n" +
+      str.substr(-1 * halfCutoff);
+  }
+  return str;
+}
+
 function Worker(workerPath, workerArgs, options) {
   options = options || {}
 
@@ -62,10 +73,12 @@ Worker.prototype._onChildExit = function(code, signalStr) {
     return;
   }
 
+  var trimmedStderr = _middleTruncate(this._stderrData.trim(), 10000);
+
   var errorMsg =
     ' exit code: ' + code + ', exit signal: ' + signalStr + '\n' +
     'stderr:\n' +
-    '  ' + this._stderrData.trim() + '\n';
+    '  ' + trimmedStderr + '\n';
 
   if (this._initialized === false) {
     throw new Error(
