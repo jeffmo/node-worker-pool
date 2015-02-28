@@ -22,5 +22,6 @@
     "testPathIgnorePatterns": [
       "node_modules"
     ]
-  }
+  },
+  "license": "MIT"
 }
