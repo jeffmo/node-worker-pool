@@ -44,7 +44,7 @@ function startWorker(onInitialize, onMessageReceived, onShutdown) {
               );
             }
             return response;
-          }).done(respondWithResult, respondWithError);
+          }).then(respondWithResult, respondWithError);
         } catch (e) {
           respondWithError(e.stack || e.message);
         }
