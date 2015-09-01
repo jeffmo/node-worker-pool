@@ -1,7 +1,7 @@
 "use strict";
 
-var Q = require('q');
 var Worker = require('./Worker');
+var Deferred = require('./lib/Deferred');
 
 function WorkerPool(numWorkers, workerPath, workerArgs, options) {
   options = options || {};
@@ -43,7 +43,7 @@ WorkerPool.prototype._eagerBootAllWorkers = function() {
 
 WorkerPool.prototype._sendMessageToWorker = function(workerID, msg) {
   var worker = this._allWorkers[workerID];
-  var pendingResponse = worker.sendMessage(msg).finally(function(response) {
+  var settle = function(response) {
     if (this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)
         && this._queuedWorkerSpecificMessages[workerID].length > 0) {
       var queuedMsg = this._queuedWorkerSpecificMessages[workerID].shift();
@@ -67,7 +67,8 @@ WorkerPool.prototype._sendMessageToWorker = function(workerID, msg) {
       this._availableWorkers.push(workerID);
       delete this._workerPendingResponses[workerID];
     }
-  }.bind(this));
+  }.bind(this);
+  var pendingResponse = worker.sendMessage(msg).then(settle, settle);
   return this._workerPendingResponses[workerID] = pendingResponse;
 };
 
@@ -91,7 +92,7 @@ WorkerPool.prototype.sendMessage = function(msg) {
     );
   } else {
     var queuedMsgID = this._queuedMessages.length;
-    var deferred = Q.defer();
+    var deferred = Deferred();
     this._queuedMessages.push({
       deferred: deferred,
       msg: msg
@@ -114,7 +115,7 @@ WorkerPool.prototype.sendMessageToAllWorkers = function(msg) {
   // Queue the message up for all currently busy workers
   var busyWorkerResponses = [];
   for (var workerID in this._workerPendingResponses) {
-    var deferred = Q.defer();
+    var deferred = Deferred();
     if (!this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)) {
       this._queuedWorkerSpecificMessages[workerID] = [];
     }
@@ -131,19 +132,31 @@ WorkerPool.prototype.sendMessageToAllWorkers = function(msg) {
   }, this);
   this._availableWorkers = [];
 
-  return Q.all(availableWorkerResponses.concat(busyWorkerResponses));
+  return Promise.all(availableWorkerResponses.concat(busyWorkerResponses));
 };
 
 WorkerPool.prototype.destroy = function() {
   var allWorkers = this._allWorkers;
 
   this._isDestroyed = true;
-  return Q.allSettled(this._allPendingResponses)
-    .then(function() {
-      return Q.all(allWorkers.map(function(worker) {
-        return worker.destroy();
-      }));
+
+  var allPending = this._allPendingResponses;
+  return new Promise(function(resolve, reject) {
+    var pending = allPending.length;
+    function settle() {
+      if (--pending <= 0) {
+        resolve();
+      }
+    }
+
+    allPending.forEach(function(promise) {
+      promise.then(settle, settle);
     });
+  }).then(function() {
+    return Promise.all(allWorkers.map(function(worker) {
+      return worker.destroy();
+    }));
+  });
 };
 
 module.exports = WorkerPool;

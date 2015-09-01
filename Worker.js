@@ -1,8 +1,8 @@
 "use strict";
 
 var child_process = require('child_process');
+var Deferred = require('./lib/Deferred');
 var JSONStreamParser = require('./lib/JSONStreamParser');
-var Q = require('q');
 
 function _middleTruncate(str, cutoffLength) {
   if (str.length > cutoffLength) {
@@ -35,7 +35,7 @@ function Worker(workerPath, workerArgs, options) {
   this._workerPath = workerPath;
 
   // Send init data to the child first thing
-  this._initDeferred = Q.defer();
+  this._initDeferred = Deferred();
   this._initialized = false;
   child.stdin.write(JSON.stringify({initData: options.initData}));
 }
@@ -158,10 +158,12 @@ Worker.prototype.destroy = function() {
     ? this._initDeferred.promise
     : this._pendingResponseDeferred.promise;
 
-  return pendingWork.finally(function() {
+  var cleanup = function() {
     this._childProcess.stdin.end();
     this._childProcess.kill();
-  }.bind(this));
+  }.bind(this);
+
+  return pendingWork.then(cleanup, cleanup);
 };
 
 Worker.prototype.sendMessage = function(messageObj) {
@@ -179,7 +181,7 @@ Worker.prototype.sendMessage = function(messageObj) {
       'message at a time.'
     );
   }
-  this._pendingResponseDeferred = Q.defer();
+  this._pendingResponseDeferred = Deferred();
   var responsePromise = this._pendingResponseDeferred.promise;
 
   var workerName = this._opts.workerName;

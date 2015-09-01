@@ -2,6 +2,8 @@ jest
   .autoMockOff()
   .mock('child_process');
 
+global.Promise = require('promise');
+
 describe('Worker', function() {
   var FAKE_ARGS = ['--fakeArg1', '--fakeArg2=42'];
   var FAKE_PATH = '/path/to/some/fake/worker';
@@ -66,7 +68,7 @@ describe('Worker', function() {
     Worker = require('../Worker');
   });
 
-  pit('boots a child process with the supplied path/args', function() {
+  it('boots a child process with the supplied path/args', function() {
     new Worker(FAKE_PATH, FAKE_ARGS);
     expect(child_process.spawn.mock.calls).toEqual([
       [FAKE_PATH, FAKE_ARGS]
@@ -75,7 +77,7 @@ describe('Worker', function() {
 
   describe('options', function() {
     describe('initData', function() {
-      pit('writes empty init data to child process on boot', function() {
+      it('writes empty init data to child process on boot', function() {
         new Worker(FAKE_PATH, FAKE_ARGS);
 
         var mockChildren = child_process.mockChildren;
@@ -83,7 +85,7 @@ describe('Worker', function() {
         expect(initData).toEqual(JSON.stringify({initData: undefined}));
       });
 
-      pit('writes non-empty init data to child process on boot', function() {
+      it('writes non-empty init data to child process on boot', function() {
         var INIT_DATA = {data: 42};
         new Worker(FAKE_PATH, FAKE_ARGS, {initData: INIT_DATA});
 
@@ -92,14 +94,14 @@ describe('Worker', function() {
         expect(initData).toEqual(JSON.stringify({initData: INIT_DATA}));
       });
 
-      pit('throws when an initError is received', function() {
+      it('throws when an initError is received', function() {
         new Worker(FAKE_PATH, FAKE_ARGS);
         expect(function() {
           _simulateRawResponse(JSON.stringify({initError: 'initError!'}));
         }).toThrow('Error initializing worker: initError!');
       });
 
-      pit('throws when an invalid init response is received', function() {
+      it('throws when an invalid init response is received', function() {
         new Worker(FAKE_PATH, FAKE_ARGS);
         expect(function() {
           _simulateRawResponse(JSON.stringify({notAnInitResponse: true}));
@@ -129,7 +131,7 @@ describe('Worker', function() {
         console.log = origConsoleLog;
       });
 
-      pit('does not print responses when not specified (default)', function() {
+      it('does not print responses when not specified (default)', function() {
         var MESSAGE = {input: 42};
         var RESPONSE = {output: 43};
 
@@ -147,7 +149,7 @@ describe('Worker', function() {
         expect(console.log.mock.calls.length).toBe(0);
       });
 
-      pit('does not print responses when off', function() {
+      it('does not print responses when off', function() {
         var MESSAGE = {input: 42};
         var RESPONSE = {output: 43};
 
@@ -166,7 +168,8 @@ describe('Worker', function() {
 
         expect(console.log.mock.calls.length).toBe(0);
       });
-      pit('prints unnamed child responses when on', function() {
+
+      it('prints unnamed child responses when on', function() {
         var MESSAGE = {input: 42};
         var RESPONSE = {output: 43};
         var worker = new Worker(FAKE_PATH, FAKE_ARGS, {
@@ -198,7 +201,7 @@ describe('Worker', function() {
         ]);
       });
 
-      pit('prints named child responses when on', function() {
+      it('prints named child responses when on', function() {
         var MESSAGE = {input: 42};
         var NAME = 'BARNABY';
         var RESPONSE = {output: 43};
@@ -236,7 +239,7 @@ describe('Worker', function() {
   });
 
   describe('destroy', function() {
-    pit('waits for initialization to finish', function() {
+    it('waits for initialization to finish', function() {
       var INIT_DATA = {init: 7};
       var worker = new Worker(FAKE_PATH, FAKE_ARGS, {initData: INIT_DATA});
 
@@ -251,7 +254,7 @@ describe('Worker', function() {
       expect(mockChildren[0].kill.mock.calls.length).toBe(1);
     });
 
-    pit('waits for pending message to finish', function() {
+    it('waits for pending message to finish', function() {
       var INIT_DATA = {init: 7};
       var MESSAGE = {input: 42};
       var RESPONSE = {output: 43};
@@ -273,7 +276,7 @@ describe('Worker', function() {
       expect(mockChildren[0].kill.mock.calls.length).toBe(1);
     });
 
-    pit('destroys even when a pending message bubbles an error', function() {
+    it('destroys even when a pending message bubbles an error', function() {
       var MESSAGE = {input: 42};
 
       var worker = new Worker(FAKE_PATH, FAKE_ARGS);
