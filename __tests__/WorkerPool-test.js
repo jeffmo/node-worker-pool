@@ -2,14 +2,16 @@ jest
   .autoMockOff()
   .mock('../Worker');
 
+global.Promise = require('promise');
+
 describe('WorkerPool', function() {
   var FAKE_ARGS = ['--fakeArg1', '--fakeArg2=42'];
   var FAKE_INIT_DATA = {initData: 12345};
   var FAKE_PATH = '/path/to/some/fake/worker';
 
-  var Q;
   var Worker;
   var WorkerPool;
+  var Deferred;
 
   var _workerDestroyDeferreds;
   var _workerSendMessageDeferreds;
@@ -73,7 +75,7 @@ describe('WorkerPool', function() {
   }
 
   beforeEach(function() {
-    Q = require('q');
+    Deferred = require('../lib/Deferred');
     Worker = require('../Worker');
     WorkerPool = require('../WorkerPool');
 
@@ -118,26 +120,26 @@ describe('WorkerPool', function() {
     _workerDestroyDeferreds = [];
     _workerSendMessageDeferreds = [];
     Worker.prototype.destroy.mockImpl(function() {
-      var deferred = Q.defer();
+      var deferred = Deferred();
       _workerDestroyDeferreds.push(deferred);
       return deferred.promise;
     });
     Worker.prototype.sendMessage.mockImpl(function() {
-      var deferred = Q.defer();
+      var deferred = Deferred();
       _workerSendMessageDeferreds.push(deferred);
       return deferred.promise;
     });
   });
 
   describe.only('worker booting', function() {
-    pit('eagerly boots all workers by default', function() {
+    it('eagerly boots all workers by default', function() {
       new WorkerPool(3, FAKE_PATH, FAKE_ARGS, {
         initData: FAKE_INIT_DATA
       });
       expect(Worker.mock.instances.length).toBe(3);
     });
 
-    pit('lazily boots workers when lazyBoot flag is passed', function() {
+    it('lazily boots workers when lazyBoot flag is passed', function() {
       var pool = new WorkerPool(3, FAKE_PATH, FAKE_ARGS, {
         initData: FAKE_INIT_DATA,
         lazyBoot: true
@@ -157,7 +159,7 @@ describe('WorkerPool', function() {
       expect(Worker.mock.instances.length).toBe(3);
     });
 
-    pit('passes correct worker args down to booted workers', function() {
+    it('passes correct worker args down to booted workers', function() {
       var pool = new WorkerPool(1, FAKE_PATH, FAKE_ARGS, {
         initData: FAKE_INIT_DATA,
         printChildResponses: true
@@ -173,7 +175,7 @@ describe('WorkerPool', function() {
   });
 
   describe('sendMessage', function() {
-    pit('sends a message to only one worker', function() {
+    it('sends a message to only one worker', function() {
       var MESSAGE = {value: 1};
       var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
       pool.sendMessage(MESSAGE);
@@ -183,7 +185,7 @@ describe('WorkerPool', function() {
       ]);
     });
 
-    pit('sends one message to a given worker at a time', function() {
+    it('sends one message to a given worker at a time', function() {
       var MESSAGE1 = {value: 1};
       var MESSAGE2 = {value: 2};
       var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
@@ -196,7 +198,7 @@ describe('WorkerPool', function() {
       ]);
     });
 
-    pit('queues messages when all workers are busy', function() {
+    it('queues messages when all workers are busy', function() {
       var MESSAGE1 = {value: 1};
       var MESSAGE2 = {value: 2};
       var MESSAGE3 = {value: 3};
@@ -220,7 +222,7 @@ describe('WorkerPool', function() {
       ]);
     });
 
-    pit('successfully moves on to next msg if first msg errored', function() {
+    it('successfully moves on to next msg if first msg errored', function() {
       var MESSAGE1 = {value: 1};
       var MESSAGE2 = {value: 2};
       var pool = new WorkerPool(1, FAKE_PATH, FAKE_ARGS);
@@ -240,7 +242,7 @@ describe('WorkerPool', function() {
       ]);
     });
 
-    pit('throws when sending a message after being destroyed', function() {
+    it('throws when sending a message after being destroyed', function() {
       var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
       pool.destroy();
       expect(function() {
@@ -295,7 +297,7 @@ describe('WorkerPool', function() {
   });
 
   describe('sendMessageToAllWorkers', function() {
-    pit('sends message to all workers when all workers are free', function() {
+    it('sends message to all workers when all workers are free', function() {
       var MESSAGE = {value: 1};
       var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
 
@@ -312,7 +314,7 @@ describe('WorkerPool', function() {
       ]);
     });
 
-    pit('sends message to all workers when all workers are busy', function() {
+    it('sends message to all workers when all workers are busy', function() {
       var BUSY_MESSAGE = {value: 1};
       var MESSAGE_TO_ALL = {value: 2};
       var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
@@ -350,7 +352,7 @@ describe('WorkerPool', function() {
       ]);
     });
 
-    pit('does not send the message to the same worker twice', function() {
+    it('does not send the message to the same worker twice', function() {
       var BUSY_MESSAGE = {value: 1};
       var MESSAGE_TO_ALL = {value: 2};
       var pool = new WorkerPool(2, FAKE_PATH, FAKE_ARGS);
@@ -399,7 +401,7 @@ describe('WorkerPool', function() {
   });
 
   describe('destroy', function() {
-    pit('destroys all workers', function() {
+    it('destroys all workers', function() {
       var pool = new WorkerPool(3, FAKE_PATH, FAKE_ARGS);
 
       pool.destroy();
@@ -429,7 +431,7 @@ describe('WorkerPool', function() {
       });
     });
 
-    pit('waits for pending messages to finish before resolving', function() {
+    it('waits for pending messages to finish before resolving', function() {
       var MESSAGE1 = {value: 1};
       var MESSAGE2 = {value: 2};
 
@@ -463,7 +465,7 @@ describe('WorkerPool', function() {
       expect(poolIsDestroyed).toBe(true);
     });
 
-    pit('resolves when waiting on pending response that errors', function() {
+    it('resolves when waiting on pending response that errors', function() {
       var MESSAGE1 = {value: 1};
       var MESSAGE2 = {value: 2};
 

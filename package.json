@@ -1,9 +1,6 @@
 {
   "name": "node-worker-pool",
   "version": "2.4.5",
-  "dependencies": {
-    "q": "~0.9.7"
-  },
   "main": "WorkerPool",
   "repository": {
     "type": "git",
@@ -13,7 +10,8 @@
     "test": "jest"
   },
   "devDependencies": {
-    "jest-cli": "^0.1.18"
+    "jest-cli": "^0.5.0",
+    "promise": "^7.0.4"
   },
   "jest": {
     "modulePathIgnorePatterns": [

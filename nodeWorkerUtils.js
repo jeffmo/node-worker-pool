@@ -1,5 +1,4 @@
 var JSONStreamParser = require('./lib/JSONStreamParser');
-var Q = require('q');
 var util = require('util');
 
 function respondWithError(err) {
