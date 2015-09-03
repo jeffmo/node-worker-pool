@@ -43,30 +43,27 @@ WorkerPool.prototype._eagerBootAllWorkers = function() {
 
 WorkerPool.prototype._sendMessageToWorker = function(workerID, msg) {
   var worker = this._allWorkers[workerID];
-  var settle = function(response) {
+  var settle = function(res) {
+    var queuedMsg;
     if (this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)
         && this._queuedWorkerSpecificMessages[workerID].length > 0) {
-      var queuedMsg = this._queuedWorkerSpecificMessages[workerID].shift();
-      this._sendMessageToWorker(workerID, queuedMsg.msg)
-        .catch(function(err) {
-          queuedMsg.deferred.reject(err);
-        })
-        .done(function(response) {
-          queuedMsg.deferred.resolve(response);
-        });
+      queuedMsg = this._queuedWorkerSpecificMessages[workerID].shift();
     } else if (this._queuedMessages.length > 0) {
-      var queuedMsg = this._queuedMessages.shift();
+      queuedMsg = this._queuedMessages.shift();
+    }
+
+    if (queuedMsg) {
       this._sendMessageToWorker(workerID, queuedMsg.msg)
-        .catch(function(err) {
-          queuedMsg.deferred.reject(err);
-        })
-        .done(function(response) {
+        .then(function(response) {
           queuedMsg.deferred.resolve(response);
-        })
+        }, function(error) {
+          queuedMsg.deferred.reject(error);
+        });
     } else {
       this._availableWorkers.push(workerID);
       delete this._workerPendingResponses[workerID];
     }
+    return res;
   }.bind(this);
   var pendingResponse = worker.sendMessage(msg).then(settle, settle);
   return this._workerPendingResponses[workerID] = pendingResponse;
