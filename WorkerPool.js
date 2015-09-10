@@ -63,9 +63,20 @@ WorkerPool.prototype._sendMessageToWorker = function(workerID, msg) {
       this._availableWorkers.push(workerID);
       delete this._workerPendingResponses[workerID];
     }
-    return res;
   }.bind(this);
-  var pendingResponse = worker.sendMessage(msg).then(settle, settle);
+
+  var pendingResponse = worker.sendMessage(msg).then(
+    function(response) {
+      return Promise.resolve(settle).then(function() {
+        return response;
+      });
+    },
+    function(error) {
+      return Promise.resolve(settle).then(function() {
+        throw error;
+      });
+    }
+  );
   return this._workerPendingResponses[workerID] = pendingResponse;
 };
 
