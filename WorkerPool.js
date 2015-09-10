@@ -43,7 +43,7 @@ WorkerPool.prototype._eagerBootAllWorkers = function() {
 
 WorkerPool.prototype._sendMessageToWorker = function(workerID, msg) {
   var worker = this._allWorkers[workerID];
-  var settle = function(res) {
+  var settle = function() {
     var queuedMsg;
     if (this._queuedWorkerSpecificMessages.hasOwnProperty(workerID)
         && this._queuedWorkerSpecificMessages[workerID].length > 0) {
@@ -67,12 +67,12 @@ WorkerPool.prototype._sendMessageToWorker = function(workerID, msg) {
 
   var pendingResponse = worker.sendMessage(msg).then(
     function(response) {
-      return Promise.resolve(settle).then(function() {
+      return Promise.resolve(settle()).then(function() {
         return response;
       });
     },
     function(error) {
-      return Promise.resolve(settle).then(function() {
+      return Promise.resolve(settle()).then(function() {
         throw error;
       });
     }
