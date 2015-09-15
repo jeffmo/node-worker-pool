@@ -38,13 +38,13 @@ function onInitialize(data) {
 
 /**
  * Executed each time a message is received from the worker pool.
- * Returns the response to the message (response must always be an object)
+ * Returns the response to the message (response must always be a promise that resolves to an object)
  */
 function onMessage(data) {
-  return {
+  return Promise.resolve({
     initData: initData,
     receivedData: data
-  };
+  });
 }
 
 if (require.main === module) {
@@ -61,8 +61,10 @@ __workerPool.js__
 if (require.main === module) {
   var workerPool = new WorkerPool(
     8,                // number of workers
-    process.execPath, // path to the node binary
-    './worker.js',    // path to the worker script
+    process.execPath, // path to the worker (e.g. node binary)
+    [                 // worker arguments
+      './worker.js',  // e.g. path to the script
+    ],
     {
       // The initData object that is passed to each worker exactly once before
       // any messages get sent. Workers receive this object via their
